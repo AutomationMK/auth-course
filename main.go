@@ -1,94 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"net/http"
+	"encoding/base64"
+	"fmt"
 )
 
-type person struct {
-	First string
-}
-
 func main() {
-	//p1 := person{
-	//	First: "Jenny",
-	//}
-
-	//p2 := person{
-	//	First: "James",
-	//}
-
-	//xp := []person{p1, p2}
-
-	//bs, err := json.Marshal(xp)
-	//if err != nil {
-	//	log.Panic(err)
-	//}
-	//fmt.Println("PRINT JSON", string(bs))
-
-	//xp2 := []person{}
-
-	//err = json.Unmarshal(bs, &xp2)
-	//if err != nil {
-	//	log.Panic(err)
-	//}
-
-	//fmt.Println("back into Go data structure", xp2)
-
-	http.HandleFunc("/encode", foo)
-	http.HandleFunc("/decode", bar)
-
-	// ninja level 1 exercises
-	http.HandleFunc("/encode-slice", encodeSlice)
-	http.HandleFunc("/decode-slice", decodeSlice)
-
-	http.ListenAndServe(":8080", nil)
-}
-
-func foo(w http.ResponseWriter, r *http.Request) {
-	p1 := person{
-		First: "Jenny",
-	}
-
-	err := json.NewEncoder(w).Encode(p1)
-	if err != nil {
-		log.Println("Encoded bad data", err)
-	}
-}
-
-func bar(w http.ResponseWriter, r *http.Request) {
-	var p1 person
-	err := json.NewDecoder(r.Body).Decode(&p1)
-	if err != nil {
-		log.Println("Decoded bad data", err)
-	}
-
-	log.Println("Person:", p1)
-}
-
-func encodeSlice(w http.ResponseWriter, r *http.Request) {
-	p1 := person{
-		First: "Max",
-	}
-	p2 := person{
-		First: "Jenny",
-	}
-
-	xp := []person{p1, p2}
-	err := json.NewEncoder(w).Encode(xp)
-	if err != nil {
-		log.Println("Encoded bad slice", err)
-	}
-}
-
-func decodeSlice(w http.ResponseWriter, r *http.Request) {
-	xp := []person{}
-
-	err := json.NewDecoder(r.Body).Decode(&xp)
-	if err != nil {
-		log.Println("Decoded bad slice", err)
-	}
-
-	log.Println("Decoded slice:", xp)
+	fmt.Println(base64.StdEncoding.EncodeToString([]byte("user:pass")))
 }
