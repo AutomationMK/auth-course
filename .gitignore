@@ -1,0 +1,16 @@
+*.log
+.DS_Store
+.env
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+/node_modules
+*/static/css/output.css
+coverage.out
+/db-data
+/static/images/email/*
+/emails
+/dist
+schema.sql
