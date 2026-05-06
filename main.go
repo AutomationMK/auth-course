@@ -38,6 +38,10 @@ func main() {
 
 	http.HandleFunc("/encode", foo)
 	http.HandleFunc("/decode", bar)
+
+	// ninja level 1 exercises
+	http.HandleFunc("/encode-slice", encodeSlice)
+
 	http.ListenAndServe(":8080", nil)
 }
 
@@ -60,4 +64,19 @@ func bar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println("Person:", p1)
+}
+
+func encodeSlice(w http.ResponseWriter, r *http.Request) {
+	p1 := person{
+		First: "Max",
+	}
+	p2 := person{
+		First: "Jenny",
+	}
+
+	xp := []person{p1, p2}
+	err := json.NewEncoder(w).Encode(xp)
+	if err != nil {
+		log.Println("Encoded bad slice", err)
+	}
 }
