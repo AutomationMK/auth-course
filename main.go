@@ -40,18 +40,36 @@ func main() {
 	}
 	bs = bs[:16]
 
-	rslt, err := encDecode(bs, msg)
+	rslt, iv, err := aesEncode(bs, msg)
 	if err != nil {
 		log.Panic(err)
 	}
 	fmt.Println("before base64", string(rslt))
 	fmt.Println(base64.URLEncoding.EncodeToString(rslt))
 
-	rslt2, err := encDecode(bs, string(rslt))
+	rslt2, err := aesDecode(bs, iv, string(rslt))
 	if err != nil {
 		log.Panic(err)
 	}
 	fmt.Println(string(rslt2))
+
+	fmt.Println("io.Stream examples")
+	wtrEnc := &bytes.Buffer{}
+	encWriter, iv, err := aesEncodeWriter(wtrEnc, bs)
+	_, err = io.WriteString(encWriter, msg)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println("before base64", wtrEnc.String())
+	fmt.Println(base64.URLEncoding.EncodeToString(wtrEnc.Bytes()))
+
+	wtrDec := &bytes.Buffer{}
+	decWriter, err := aesDecodeWriter(wtrDec, bs, iv)
+	_, err = io.WriteString(decWriter, wtrEnc.String())
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println(wtrDec.String())
 }
 
 func hashPassword(password string) ([]byte, error) {
@@ -156,14 +174,36 @@ func parseToken(tokenStr string) (*UserClaims, error) {
 	return t.Claims.(*UserClaims), nil
 }
 
-func encDecode(key []byte, input string) ([]byte, error) {
+func aesEncode(key []byte, input string) ([]byte, []byte, error) {
 	b, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("Error in encDecode while using NewCipher: %w", err)
+		return nil, nil, fmt.Errorf("Error in aesEncode while using NewCipher: %w", err)
 	}
 
 	// initialization vector
 	iv := make([]byte, aes.BlockSize)
+	_, err = io.ReadFull(rand.Reader, iv)
+
+	s := cipher.NewCTR(b, iv)
+
+	buff := &bytes.Buffer{}
+	sw := cipher.StreamWriter{
+		S: s,
+		W: buff,
+	}
+	_, err = sw.Write([]byte(input))
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error in aesEncode while using StreamWriter.Write: %w", err)
+	}
+
+	return buff.Bytes(), iv, nil
+}
+
+func aesDecode(key, iv []byte, input string) ([]byte, error) {
+	b, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("Error in aesDecode while using NewCipher: %w", err)
+	}
 
 	s := cipher.NewCTR(b, iv)
 
@@ -178,4 +218,39 @@ func encDecode(key []byte, input string) ([]byte, error) {
 	}
 
 	return buff.Bytes(), nil
+}
+
+func aesEncodeWriter(wtr io.Writer, key []byte) (io.Writer, []byte, error) {
+	b, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error in aesEncodeWriter while using NewCipher: %w", err)
+	}
+
+	// initialization vector
+	iv := make([]byte, aes.BlockSize)
+	_, err = io.ReadFull(rand.Reader, iv)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error in aesEncodeWriter while using io.ReadFull for init vector: %w", err)
+	}
+
+	s := cipher.NewCTR(b, iv)
+
+	return cipher.StreamWriter{
+		S: s,
+		W: wtr,
+	}, iv, nil
+}
+
+func aesDecodeWriter(wtr io.Writer, key, iv []byte) (io.Writer, error) {
+	b, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("Error in aesDecodeWriter while using NewCipher: %w", err)
+	}
+
+	s := cipher.NewCTR(b, iv)
+
+	return cipher.StreamWriter{
+		S: s,
+		W: wtr,
+	}, nil
 }
