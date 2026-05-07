@@ -6,8 +6,21 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type UserClaims struct {
+	jwt.RegisteredClaims
+	SessionID int64 `json:"session-id"`
+}
+
+func (u *UserClaims) Validate() error {
+	if u.SessionID == 0 {
+		return fmt.Errorf("Invalid session ID")
+	}
+	return nil
+}
 
 var key = []byte{}
 
