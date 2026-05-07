@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha512"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -27,19 +31,27 @@ func (u *UserClaims) Validate() error {
 }
 
 func main() {
-	pass := "123456789"
+	msg := "This is totally fun get hands-on and learning it from the ground up."
 
-	hashedPass, err := hashPassword(pass)
+	pass := "ilovedogs"
+	bs, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.MinCost)
 	if err != nil {
-		panic(err)
+		log.Panic("couldn't bcrypt password", err)
 	}
+	bs = bs[:16]
 
-	err = comparePassword(pass, hashedPass)
+	rslt, err := encDecode(bs, msg)
 	if err != nil {
-		log.Fatal("Not logged in")
+		log.Panic(err)
 	}
+	fmt.Println("before base64", string(rslt))
+	fmt.Println(base64.URLEncoding.EncodeToString(rslt))
 
-	log.Println("Logged in!")
+	rslt2, err := encDecode(bs, string(rslt))
+	if err != nil {
+		log.Panic(err)
+	}
+	fmt.Println(string(rslt2))
 }
 
 func hashPassword(password string) ([]byte, error) {
@@ -142,4 +154,28 @@ func parseToken(tokenStr string) (*UserClaims, error) {
 	}
 
 	return t.Claims.(*UserClaims), nil
+}
+
+func encDecode(key []byte, input string) ([]byte, error) {
+	b, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("Error in encDecode while using NewCipher: %w", err)
+	}
+
+	// initialization vector
+	iv := make([]byte, aes.BlockSize)
+
+	s := cipher.NewCTR(b, iv)
+
+	buff := &bytes.Buffer{}
+	sw := cipher.StreamWriter{
+		S: s,
+		W: buff,
+	}
+	_, err = sw.Write([]byte(input))
+	if err != nil {
+		return nil, fmt.Errorf("Error in encDecode while using StreamWriter.Write: %w", err)
+	}
+
+	return buff.Bytes(), nil
 }
