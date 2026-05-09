@@ -32,9 +32,18 @@ func (u *UserClaims) Validate() error {
 	return nil
 }
 
+type emailClaims struct {
+	jwt.RegisteredClaims
+	Email string `json:"email"`
+}
+
+const myKey = "password"
+
 func main() {
 	http.HandleFunc("/", hmacExp)
 	http.HandleFunc("/submit", hmacSubmit)
+	http.HandleFunc("/jwt", jwtExp)
+	http.HandleFunc("/jwt/submit", jwtSubmit)
 	http.ListenAndServe(":8080", nil)
 }
 
@@ -111,6 +120,99 @@ func hmacGetCode(msg string) string {
 	h := hmac.New(sha256.New, []byte("I love thursdays when it rains 1234"))
 	h.Write([]byte(msg))
 	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func jwtExp(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("jwt-session")
+	if err != nil {
+		c = &http.Cookie{}
+	}
+
+	signedString := c.Value
+	verifiedToken, err := jwt.ParseWithClaims(signedString, &emailClaims{}, func(unverifiedToken *jwt.Token) (any, error) {
+		if unverifiedToken.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, fmt.Errorf("Wrong signing method")
+		}
+		return []byte(myKey), nil
+	})
+
+	isValid := err == nil && verifiedToken.Valid
+	message := "Not logged in"
+	if isValid {
+		message = "Logged in"
+		claims := verifiedToken.Claims.(*emailClaims)
+		fmt.Println(claims.Email)
+		fmt.Println(claims.ExpiresAt)
+	}
+
+	html := `<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>HMAC Example</title>
+		</head>
+		<body>
+			<p>Cookie value:` + c.Value + `</p>
+            <p>` + message + `</p>
+			<form action="/jwt/submit" method="POST">
+				<input type="email" name="email">
+				<input type="submit">
+			</form>
+		</body>
+	</html>`
+	io.WriteString(w, html)
+}
+
+func jwtSubmit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/jwt", http.StatusSeeOther)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Error in parsing form", http.StatusInternalServerError)
+		return
+	}
+
+	email := r.FormValue("email")
+	if email == "" {
+		http.Redirect(w, r, "/jwt", http.StatusSeeOther)
+		return
+	}
+
+	signedString, err := getJWT(email)
+	if err != nil {
+		http.Error(w, "Error in getJWT", http.StatusInternalServerError)
+	}
+
+	c := http.Cookie{
+		Name:  "jwt-session",
+		Value: signedString,
+	}
+
+	http.SetCookie(w, &c)
+	http.Redirect(w, r, "/jwt", http.StatusSeeOther)
+}
+
+func getJWT(msg string) (string, error) {
+	claims := emailClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+		Email: msg,
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
+	signedString, err := token.SignedString([]byte(myKey))
+	if err != nil {
+		return "", fmt.Errorf("Error in getJWT using token.SignedString: %w", err)
+	}
+
+	return signedString, nil
 }
 
 func hashPassword(password string) ([]byte, error) {
