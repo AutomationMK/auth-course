@@ -6,11 +6,13 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -31,45 +33,84 @@ func (u *UserClaims) Validate() error {
 }
 
 func main() {
-	msg := "This is totally fun get hands-on and learning it from the ground up."
+	http.HandleFunc("/", hmacExp)
+	http.HandleFunc("/submit", hmacSubmit)
+	http.ListenAndServe(":8080", nil)
+}
 
-	pass := "ilovedogs"
-	bs, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.MinCost)
+func hmacExp(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("session")
 	if err != nil {
-		log.Panic("couldn't bcrypt password", err)
+		c = &http.Cookie{}
 	}
-	bs = bs[:16]
 
-	rslt, iv, err := aesEncode(bs, msg)
-	if err != nil {
-		log.Panic(err)
-	}
-	fmt.Println("before base64", string(rslt))
-	fmt.Println(base64.URLEncoding.EncodeToString(rslt))
+	isEqual := true
+	xs := strings.SplitN(c.Value, "|", 2)
+	if len(xs) == 2 {
+		cCode := xs[0]
+		cEmail := xs[1]
 
-	rslt2, err := aesDecode(bs, iv, string(rslt))
-	if err != nil {
-		log.Panic(err)
-	}
-	fmt.Println(string(rslt2))
+		code := hmacGetCode(cEmail)
 
-	fmt.Println("io.Stream examples")
-	wtrEnc := &bytes.Buffer{}
-	encWriter, iv, err := aesEncodeWriter(wtrEnc, bs)
-	_, err = io.WriteString(encWriter, msg)
-	if err != nil {
-		log.Fatalln(err)
+		isEqual = hmac.Equal([]byte(cCode), []byte(code))
 	}
-	fmt.Println("before base64", wtrEnc.String())
-	fmt.Println(base64.URLEncoding.EncodeToString(wtrEnc.Bytes()))
 
-	wtrDec := &bytes.Buffer{}
-	decWriter, err := aesDecodeWriter(wtrDec, bs, iv)
-	_, err = io.WriteString(decWriter, wtrEnc.String())
-	if err != nil {
-		log.Fatalln(err)
+	message := "Not logged in"
+	if isEqual {
+		message = "Logged in"
 	}
-	fmt.Println(wtrDec.String())
+
+	html := `<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>HMAC Example</title>
+		</head>
+		<body>
+			<p>Cookie value:` + c.Value + `</p>
+            <p>` + message + `</p>
+			<form action="/submit" method="POST">
+				<input type="email" name="email">
+				<input type="submit">
+			</form>
+		</body>
+	</html>`
+	io.WriteString(w, html)
+}
+
+func hmacSubmit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		log.Printf("Error in parsing form: %s", err)
+	}
+
+	email := r.FormValue("email")
+	if email == "" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	code := hmacGetCode(email)
+
+	c := http.Cookie{
+		Name:  "session",
+		Value: code + "|" + email,
+	}
+
+	http.SetCookie(w, &c)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func hmacGetCode(msg string) string {
+	h := hmac.New(sha256.New, []byte("I love thursdays when it rains 1234"))
+	h.Write([]byte(msg))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func hashPassword(password string) ([]byte, error) {
