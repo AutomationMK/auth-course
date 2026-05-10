@@ -33,7 +33,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 		<head>
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
-			<title>Ninja Level 2 Exercise 1</title>
+			<title>Ninja Level 2 Exercise 3</title>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 		</head>
 		<body class="flex flex-col items-center gap-20 mx-auto container px-4 pt-10 bg-slate-50">
@@ -176,7 +176,7 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 		<head>
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
-			<title>Ninja Level 2 Exercise 1</title>
+			<title>Ninja Level 2 Exercise 3</title>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 		</head>
 		<body class="flex flex-col gap-20 mx-auto container px-4 pt-10 bg-slate-50">

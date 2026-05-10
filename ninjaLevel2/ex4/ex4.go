@@ -3,13 +3,22 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
+type userClaims struct {
+	jwt.RegisteredClaims
+	SessionID string `json:"session-id"`
+}
+
 var db = make(map[string][]byte)
+var key = "secretKey"
 
 func main() {
 	http.HandleFunc("/", register)
@@ -19,6 +28,21 @@ func main() {
 }
 
 func register(w http.ResponseWriter, r *http.Request) {
+	sigStr, err := createToken("123456")
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+	log.Printf("Signed String: %s", sigStr)
+	sessID, err := parseToken(sigStr)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+	log.Printf("Session ID: %s", sessID)
+
 	regErrMsg := r.URL.Query().Get("regerrmsg")
 	logErrMsg := r.URL.Query().Get("logerrmsg")
 	fmt.Fprintf(w, `<!DOCTYPE html>
@@ -26,7 +50,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 		<head>
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
-			<title>Ninja Level 2 Exercise 2</title>
+			<title>Ninja Level 2 Exercise 1</title>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 		</head>
 		<body class="flex flex-col items-center gap-20 mx-auto container px-4 pt-10 bg-slate-50">
@@ -168,7 +192,7 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 		<head>
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
-			<title>Ninja Level 2 Exercise 2</title>
+			<title>Ninja Level 2 Exercise 1</title>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 		</head>
 		<body class="flex flex-col gap-20 mx-auto container px-4 pt-10 bg-slate-50">
@@ -177,4 +201,45 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 				</h2>
 		</body>
 	</html>`, email)
+}
+
+func createToken(sessID string) (string, error) {
+	claims := userClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+		SessionID: sessID,
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
+
+	sigStr, err := token.SignedString([]byte(key))
+	if err != nil {
+		return "", fmt.Errorf("Error in createToken: %w", err)
+	}
+
+	return sigStr, nil
+}
+
+var ErrWrongSigningMethod = errors.New("parseToken wrong signing method")
+var ErrInvalidToken = errors.New("parseToken invalid token")
+
+func parseToken(sigStr string) (string, error) {
+	vrfyTok, err := jwt.ParseWithClaims(sigStr, &userClaims{}, func(unvrfyTok *jwt.Token) (any, error) {
+		if unvrfyTok.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, ErrWrongSigningMethod
+		}
+		return []byte(key), nil
+	})
+	if err != nil && err == ErrWrongSigningMethod {
+		return "", err
+	}
+
+	if vrfyTok.Valid {
+		return vrfyTok.Claims.(*userClaims).SessionID, nil
+	}
+
+	return "", ErrInvalidToken
 }
