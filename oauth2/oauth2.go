@@ -1,8 +1,11 @@
 package main
 
 import (
+	"io"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
@@ -17,7 +20,7 @@ var githubOauthConfig = &oauth2.Config{
 func main() {
 	http.HandleFunc("/", home)
 	http.HandleFunc("/oauth/github", startGithubOauth)
-	http.HandleFunc("/oauth2/recieve", completeGithubOauth)
+	http.HandleFunc("/oauth2/receive", completeGithubOauth)
 	http.ListenAndServe(":8080", nil)
 }
 
@@ -49,8 +52,8 @@ func startGithubOauth(w http.ResponseWriter, r *http.Request) {
 }
 
 func completeGithubOauth(w http.ResponseWriter, r *http.Request) {
-	code := r.FormValue("code")
-	state := r.FormValue("state")
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
 
 	if state != "0000" {
 		http.Error(w, "State is incorrect", http.StatusBadRequest)
@@ -65,4 +68,20 @@ func completeGithubOauth(w http.ResponseWriter, r *http.Request) {
 
 	tokenSrc := githubOauthConfig.TokenSource(r.Context(), token)
 	client := oauth2.NewClient(r.Context(), tokenSrc)
+
+	requestBody := strings.NewReader(`{"query": "query {viewer {id}}"}`)
+	resp, err := client.Post("https://api.github.com/graphql", "application/json", requestBody)
+	if err != nil {
+		http.Error(w, "Couldn't get user", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	bs, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "Couldn't read Github information", http.StatusInternalServerError)
+		return
+	}
+
+	log.Println(string(bs))
 }
